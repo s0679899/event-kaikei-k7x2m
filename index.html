@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2C7873">
+<link rel="manifest" href="manifest.webmanifest">
+<title>イベント会計</title>
+<style>
+  :root {
+    --bg:#F7F5F2; --card:#fff; --ink:#2B2B2B; --sub:#6B6B6B; --line:rgba(0,0,0,.09);
+    --accent:#2C7873; --accent-d:#1F5A56; --warn:#C0392B; --ok:#2E7D32;
+    --t0:#F1ECF8; --t0i:#6E5596;   /* マフィン */
+    --t1:#FCEBEC; --t1i:#A8484F;   /* セット */
+    --t2:#FBEDE4; --t2i:#A4553A;   /* 焼き菓子 */
+    --t3:#FFF4E2; --t3i:#A0692A;   /* クッキー */
+    --t4:#E9F3EC; --t4i:#3E7A55;   /* スコーン */
+    --t5:#E8F0F8; --t5i:#2F6590;   /* その他 */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17181A; --card:#222426; --ink:#F0F0F0; --sub:#A8A8A8; --line:rgba(255,255,255,.12);
+      --accent:#4FB3AB; --accent-d:#3A8F88;
+      --t0:#2E2840; --t0i:#C4B2E8; --t1:#41262A; --t1i:#F0A8AE; --t2:#3F2E25; --t2i:#F0B79F;
+      --t3:#3F3522; --t3i:#F0C98A; --t4:#243A2D; --t4i:#9FD6B2; --t5:#223445; --t5i:#9CC6EC;
+    }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif; background:var(--bg); color:var(--ink);
+         font-weight:600; overscroll-behavior:none; -webkit-user-select:none; user-select:none; }
+  button { font-family:inherit; font-weight:700; color:inherit; }
+  #app { display:flex; flex-direction:column; height:100%; max-width:720px; margin:0 auto; }
+
+  header { background:var(--accent); color:#fff; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
+  .hrow { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .days { display:flex; gap:6px; overflow-x:auto; }
+  .day { border:none; background:rgba(255,255,255,.2); color:#fff; padding:7px 14px; border-radius:16px; font-size:15px; white-space:nowrap; }
+  .day.on { background:#fff; color:var(--accent-d); }
+  .daytotal { text-align:right; line-height:1.15; }
+  .daytotal b { font-size:20px; display:block; font-variant-numeric:tabular-nums; }
+  .daytotal span { font-size:11px; opacity:.9; }
+
+  main { flex:1; overflow-y:auto; padding:10px 10px 14px; -webkit-overflow-scrolling:touch; }
+  .view { display:none; }
+  .view.on { display:block; }
+
+  nav { display:flex; background:var(--card); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
+  nav button { flex:1; border:none; background:none; padding:11px 4px; font-size:14px; color:var(--sub); }
+  nav button.on { color:var(--accent); box-shadow:inset 0 3px 0 var(--accent); }
+
+  /* ---- 会計：商品ボタン ---- */
+  .mult { display:flex; gap:6px; align-items:center; margin-bottom:8px; }
+  .mult .lab { font-size:12px; color:var(--sub); white-space:nowrap; }
+  .mult button { flex:1; border:2px solid var(--line); background:var(--card); border-radius:10px; padding:8px 0; font-size:15px; }
+  .mult button.on { border-color:var(--accent); background:var(--accent); color:#fff; }
+  .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .pbtn { position:relative; border:none; border-radius:14px; padding:8px 6px 9px; min-height:92px; text-align:left;
+          display:flex; flex-direction:column; justify-content:space-between; touch-action:manipulation; }
+  .pbtn:active { transform:scale(.97); }
+  .pbtn .nm { font-size:14px; font-weight:800; line-height:1.3; margin-top:18px; word-break:keep-all; overflow-wrap:anywhere; }
+  .pbtn .pr { font-size:14px; font-variant-numeric:tabular-nums; }
+  .pbtn .badge { position:absolute; top:5px; right:5px; min-width:28px; height:28px; padding:0 6px; border-radius:14px; background:var(--ink); color:var(--bg);
+                 font-size:16px; line-height:28px; text-align:center; font-weight:900; display:none; }
+  .pbtn.has .badge { display:block; }
+  .pbtn.has { outline:3px solid var(--ink); }
+  .tone0 { background:var(--t0); color:var(--t0i); } .tone1 { background:var(--t1); color:var(--t1i); }
+  .tone2 { background:var(--t2); color:var(--t2i); } .tone3 { background:var(--t3); color:var(--t3i); }
+  .tone4 { background:var(--t4); color:var(--t4i); } .tone5 { background:var(--t5); color:var(--t5i); }
+  .discount { border:2px dashed currentColor; }
+  .spacer { height:150px; }
+
+  /* ---- カート ---- */
+  #cart { background:var(--card); border-top:1px solid var(--line); box-shadow:0 -2px 8px rgba(0,0,0,.08); }
+  #cart-lines { max-height:30vh; overflow-y:auto; padding:2px 12px 0; }
+  #cart.min #cart-lines { display:none; }
+  .xb { width:32px; height:40px; border:none; background:none; color:var(--warn); font-size:18px; padding:0; }
+  #editbar { display:none; align-items:center; justify-content:space-between; gap:8px; background:#FFF4E2; color:#8A5A12; padding:7px 12px; font-size:13px; }
+  #editbar.on { display:flex; }
+  #editbar button { border:1px solid currentColor; background:none; color:inherit; border-radius:8px; padding:6px 10px; font-size:13px; }
+  #dlg { z-index:80; align-items:center; }
+  #dlg .sheet { width:88%; max-width:420px; border-radius:16px; }
+  #dlg-msg { margin:2px 0 12px; font-size:16px; line-height:1.5; white-space:pre-wrap; }
+  #dlg-in { margin-bottom:10px; font-size:20px; text-align:center; }
+  .cl { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); }
+  .cl .cn { flex:1; font-size:13px; min-width:0; word-break:keep-all; overflow-wrap:anywhere; }
+  .cl .cn small { color:var(--sub); font-weight:600; }
+  .cl .cs { width:58px; text-align:right; font-size:14px; font-variant-numeric:tabular-nums; }
+  .qb { width:38px; height:40px; border:none; border-radius:10px; background:var(--bg); font-size:22px; }
+  .qv { min-width:36px; height:40px; border:1px solid var(--line); border-radius:10px; background:var(--card); font-size:17px; }
+  #cart-bar { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+  #cart-sum { flex:1; border:none; background:none; text-align:left; padding:2px 0; font-size:13px; color:var(--sub); line-height:1.25; }
+  #cart-sum b { display:block; font-size:24px; color:var(--ink); font-variant-numeric:tabular-nums; }
+  #btn-clear { border:2px solid var(--line); background:none; border-radius:12px; padding:12px 12px; font-size:14px; color:var(--sub); }
+  #btn-pay { border:none; background:var(--accent); color:#fff; border-radius:12px; padding:14px 22px; font-size:18px; }
+  #btn-pay:disabled, #btn-clear:disabled { opacity:.35; }
+
+  /* ---- お会計シート ---- */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:flex-end; justify-content:center; z-index:50; }
+  .overlay.on { display:flex; }
+  .sheet { background:var(--card); width:100%; max-width:720px; max-height:96vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:14px 14px max(14px, env(safe-area-inset-bottom)); }
+  .sheet h3 { margin:0; font-size:17px; }
+  .total { font-size:38px; font-weight:900; font-variant-numeric:tabular-nums; text-align:right; margin:2px 0 6px; }
+  .chips { display:flex; gap:8px; margin:6px 0 10px; }
+  .chip { flex:1; border:2px solid var(--line); background:var(--card); border-radius:12px; padding:12px 0; font-size:16px; }
+  .chip.on { border-color:var(--accent); background:var(--accent); color:#fff; }
+  .rec { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; color:var(--sub); }
+  .recv { font-size:30px; font-weight:900; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .chg { text-align:center; padding:10px; border-radius:12px; margin:8px 0; background:var(--bg); }
+  .chg small { display:block; font-size:12px; color:var(--sub); }
+  .chg b { font-size:44px; font-weight:900; font-variant-numeric:tabular-nums; }
+  .chg.ng b { color:var(--warn); font-size:26px; }
+  .chg.ok b { color:var(--ok); }
+  .quick { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:6px; }
+  .keys { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+  .quick button, .keys button { border:none; border-radius:12px; background:var(--bg); padding:13px 0; font-size:20px; }
+  .quick button { font-size:15px; }
+  .keys button.fn { color:var(--sub); font-size:16px; }
+  .actions { display:flex; gap:8px; margin-top:10px; }
+  .actions button { border:none; border-radius:12px; padding:15px 0; font-size:17px; }
+  .a-back { flex:1; background:var(--bg); }
+  .a-go { flex:2; background:var(--accent); color:#fff; }
+  .a-go:disabled { opacity:.35; }
+
+  #done { background:var(--accent); color:#fff; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px; }
+  #done .big { font-size:20px; opacity:.95; }
+  #done .amt { font-size:72px; font-weight:900; line-height:1.1; font-variant-numeric:tabular-nums; }
+  #done .mk { font-size:56px; }
+  #done button { margin-top:22px; border:none; background:#fff; color:var(--accent-d); border-radius:14px; padding:16px 38px; font-size:18px; }
+  #done .undo { background:none; color:#fff; text-decoration:underline; font-size:15px; margin-top:12px; padding:8px; }
+
+  /* ---- 集計・履歴・設定 ---- */
+  .card { background:var(--card); border-radius:14px; padding:12px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .card h4 { margin:0 0 8px; font-size:13px; color:var(--sub); }
+  .kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .kpi b { display:block; font-size:21px; font-variant-numeric:tabular-nums; }
+  .kpi span { font-size:11px; color:var(--sub); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:right; font-size:11px; color:var(--sub); padding:4px 2px; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; }
+  td { padding:7px 2px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums; }
+  td.pn { text-align:left; word-break:keep-all; overflow-wrap:anywhere; }
+  td.zero { color:var(--sub); opacity:.55; }
+  tfoot td { font-weight:900; border-bottom:none; }
+  .hs { border-bottom:1px solid var(--line); padding:9px 0; }
+  .hs:last-child { border-bottom:none; }
+  .hs .top { display:flex; justify-content:space-between; font-size:15px; }
+  .hs .it { font-size:13px; color:var(--sub); margin:3px 0; line-height:1.4; }
+  .hs .bt { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--sub); }
+  .hs.void { opacity:.45; }
+  .mini { border:1px solid var(--line); background:none; border-radius:8px; padding:6px 10px; font-size:13px; color:var(--warn); }
+  .empty { text-align:center; color:var(--sub); padding:26px 0; font-size:14px; }
+  .prow { display:grid; grid-template-columns:44px 1fr 84px 30px; gap:6px; align-items:center; padding:7px 0; border-bottom:1px solid var(--line); }
+  .prow:last-child { border-bottom:none; }
+  .prow2 { grid-column:1 / -1; display:flex; gap:6px; align-items:center; font-size:12px; color:var(--sub); }
+  input, select { font:inherit; font-weight:600; font-size:16px; padding:9px 8px; border:1px solid var(--line); border-radius:9px; background:var(--card); color:var(--ink); width:100%; min-width:0; -webkit-user-select:text; user-select:text; }
+  .del { border:none; background:none; color:var(--warn); font-size:20px; padding:0; }
+  .btn { border:none; border-radius:11px; padding:12px 14px; font-size:15px; background:var(--accent); color:#fff; }
+  .btn.sec { background:var(--bg); color:var(--ink); border:1px solid var(--line); }
+  .btn.dng { background:var(--warn); }
+  .btnrow { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .note { font-size:12px; color:var(--sub); line-height:1.5; margin:6px 0 0; font-weight:600; }
+  .status { display:inline-block; font-size:11px; padding:3px 8px; border-radius:10px; background:var(--bg); color:var(--sub); }
+  #toast { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:20px; font-size:14px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:90; max-width:90%; text-align:center; }
+  #toast.on { opacity:1; }
+  #toast.act { pointer-events:auto; }
+  #toast button { margin-left:10px; border:none; background:none; color:#7FE0D6; font-size:15px; text-decoration:underline; padding:6px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #toast button { color:#1F5A56; } }
+  textarea { width:100%; min-height:90px; font:12px/1.4 monospace; border:1px solid var(--line); border-radius:9px; background:var(--card); color:var(--ink); padding:8px; -webkit-user-select:text; user-select:text; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="hrow">
+      <div class="days" id="days"></div>
+      <div class="daytotal"><b id="h-total">¥0</b><span id="h-count">0組</span></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- 会計 -->
+    <section class="view on" id="v-sale">
+      <div class="mult"><span class="lab">まとめて<br>押す数</span>
+        <button data-m="1" class="on">×1</button><button data-m="2">×2</button><button data-m="3">×3</button><button data-m="5">×5</button><button data-m="10">×10</button>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="spacer"></div>
+    </section>
+
+    <!-- 集計 -->
+    <section class="view" id="v-report"></section>
+
+    <!-- 履歴 -->
+    <section class="view" id="v-history"></section>
+
+    <!-- 設定 -->
+    <section class="view" id="v-settings"></section>
+  </main>
+
+  <div id="cart">
+    <div id="editbar"><span id="editbar-t"></span><button id="edit-cancel">修正をやめる</button></div>
+    <div id="cart-lines"></div>
+    <div id="cart-bar">
+      <button id="cart-sum"><span id="cart-n">商品を押してください</span><b id="cart-total">¥0</b></button>
+      <button id="btn-clear" disabled>クリア</button>
+      <button id="btn-pay" disabled>会計</button>
+    </div>
+  </div>
+
+  <nav id="nav">
+    <button data-v="sale" class="on">会計</button>
+    <button data-v="report">集計</button>
+    <button data-v="history">履歴</button>
+    <button data-v="settings">設定</button>
+  </nav>
+</div>
+
+<!-- お会計 -->
+<div class="overlay" id="co"><div class="sheet">
+  <h3>お会計</h3>
+  <div class="total" id="co-total">¥0</div>
+  <div class="chips" id="co-pay"></div>
+  <div id="co-cash">
+    <div class="rec"><span>お預かり</span><span class="recv" id="co-recv">¥0</span></div>
+    <div class="chg" id="co-chg"><small>お釣り</small><b id="co-chg-v">¥0</b></div>
+    <div class="quick" id="co-quick"></div>
+    <div class="keys" id="co-keys"></div>
+  </div>
+  <div class="actions"><button class="a-back" id="co-back">戻る</button><button class="a-go" id="co-go">会計を確定</button></div>
+</div></div>
+
+<!-- 完了 -->
+<div class="overlay" id="done"><div class="mk">✓</div><div class="big" id="done-big">お会計 完了</div><div class="amt" id="done-amt"></div><div class="big" id="done-sub"></div>
+  <button id="done-next">次のお客さま</button><button class="undo" id="done-undo">いまの会計を取り消す</button></div>
+
+<!-- セットの中身を選ぶ -->
+<div class="overlay" id="bsel" style="z-index:70"><div class="sheet">
+  <h3 id="bsel-t"></h3>
+  <p class="note">セットに入っている商品と個数を選んでください。0個の商品は入りません。</p>
+  <div id="bsel-list"></div>
+  <div class="actions"><button class="a-back" id="bsel-no">やめる</button><button class="a-go" id="bsel-ok">決定</button></div>
+</div></div>
+
+<!-- アプリの中の確認の窓（Androidのホーム画面アプリでは、ブラウザの確認の窓が出ないことがあるため） -->
+<div class="overlay" id="dlg"><div class="sheet">
+  <div id="dlg-msg"></div><input id="dlg-in" inputmode="numeric" autocomplete="off">
+  <div class="actions"><button class="a-back" id="dlg-no">やめる</button><button class="a-go" id="dlg-ok">OK</button></div>
+</div></div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'eventpos.v1';
+  var TONES = ['マフィン','セット','焼き菓子','クッキー','スコーン','その他'];
+
+  // ---------- 保存（端末の中だけ。通信は一切しない） ----------
+  var memoryOnly = false, memStore = '';
+  function load() {
+    var raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) { memoryOnly = true; raw = memStore || null; }
+    if (raw) { try { var s = JSON.parse(raw); if (s && s.products) return s; } catch (e) {} }
+    return null;
+  }
+  function save() {
+    var raw = JSON.stringify(S);
+    try { localStorage.setItem(KEY, raw); } catch (e) { memoryOnly = true; memStore = raw; }
+  }
+  function defaults() {
+    var P = [
+      [1,'かぼちゃマフィン',450,0],[2,'オレオマフィン',450,0],[3,'紅茶マフィン',450,0],[4,'あんバターマフィン',450,0],
+      [5,'サクほろクッキー3種',450,3],[6,'フロランタン',350,2],[7,'ブロッキー',400,2],[8,'くるくるクッキー',350,3],
+      [9,'スコーン プレーン',350,4],[10,'スコーン チョコ',400,4],[11,'スコーン カレー',400,4],
+      [12,'スコーン 抹茶ホワイトチョコ',400,4],[13,'スコーン（5種類目・名前は未定）',400,4],[14,'マフィン4種セット',1700,1]
+    ];
+    return {
+      products: P.map(function (p, i) { var o = { id: 'p' + (i + 1), no: p[0], name: p[1], price: p[2], tone: p[3] }; if (p[0] === 14) o.bundle = ['p1', 'p2', 'p3', 'p4']; return o; }),
+      days: [{ date: '2026-11-01', label: '11/1' }, { date: '2026-11-03', label: '11/3' }],
+      sales: [], cart: {}, day: '', nextId: 15, nextSale: 1, ver: 2
+    };
+  }
+  var S = load() || defaults();
+  S.cart = S.cart || {}; S.sales = S.sales || [];
+  if (!S.ver || S.ver < 2) {      // 前の版（5番が限定セット）のデータを引き継ぐ：5番とセットの中身だけ新しくする
+    S.products.forEach(function (p) { if (p.id === 'p5' && p.name === '限定セット' && p.price === 700) { p.name = 'サクほろクッキー3種'; p.price = 450; p.tone = 3; } });
+    if (!S.products.some(function (p) { return p.name === 'マフィン4種セット'; })) {
+      var mx = 0; S.products.forEach(function (p) { if (p.no > mx) mx = p.no; });
+      var nid = S.products.some(function (p) { return p.id === 'p14'; }) ? 'p' + (S.nextId || 15) : 'p14';
+      S.nextId = Math.max(S.nextId || 15, 15) + (nid === 'p14' ? 0 : 1);
+      S.products.push({ id: nid, no: Math.max(14, mx + 1), name: 'マフィン4種セット', price: 1700, tone: 1, bundle: ['p1', 'p2', 'p3', 'p4'] });
+    }
+    S.ver = 2; save();
+  }
+  if (!S.day || !S.days.some(function (d) { return d.date === S.day; })) S.day = pickDay();
+
+  function pickDay() {
+    var t = todayStr();
+    for (var i = 0; i < S.days.length; i++) if (S.days[i].date === t) return t;
+    return S.days.length ? S.days[0].date : '';
+  }
+  function todayStr() {
+    var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function yen(n) { return (n < 0 ? '−' : '') + '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function $(id) { return document.getElementById(id); }
+  function pad(n) { return ('0' + n).slice(-2); }
+  function timeOf(iso) { var d = new Date(iso); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+
+  var toastTimer = null;
+  function toast(msg, actLabel, actFn) {
+    var el = $('toast'); el.textContent = msg; el.className = 'on';
+    var ms = 2200;
+    if (actLabel) {
+      var b = document.createElement('button'); b.textContent = actLabel;
+      b.onclick = function () { clearTimeout(toastTimer); el.className = ''; actFn(); };
+      el.appendChild(b); el.className = 'on act'; ms = 7000;
+    }
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.className = ''; }, ms);
+  }
+
+  // セットの中身を選ぶ
+  var bselId = null, bselQty = {};
+  function openBundleSelect(pid) {
+    var p = productById(pid); if (!p) return;
+    bselId = pid; bselQty = {};
+    (p.bundle || []).forEach(function (id) { bselQty[id] = (bselQty[id] || 0) + 1; });
+    $('bsel-t').textContent = '「' + p.name + '」の中身';
+    renderBselList(); $('bsel').className = 'overlay on';
+  }
+  function renderBselList() {
+    var h = '';
+    sortedProducts().forEach(function (c) {
+      if (c.id === bselId || c.price < 0) return;
+      var q = bselQty[c.id] || 0;
+      h += '<div class="cl" data-c="' + c.id + '"><div class="cn">' + esc(c.name) + '</div>'
+        + '<button class="qb" data-d="-1">−</button><span class="qv" style="display:inline-block;text-align:center;line-height:40px">' + q + '</span><button class="qb" data-d="1">＋</button></div>';
+    });
+    $('bsel-list').innerHTML = h;
+  }
+  $('bsel-list').addEventListener('click', function (e) {
+    var row = e.target.closest('.cl'), d = e.target.getAttribute('data-d'); if (!row || !d) return;
+    var id = row.getAttribute('data-c'), v = (bselQty[id] || 0) + (+d);
+    bselQty[id] = Math.max(0, Math.min(v, 99)); renderBselList();
+  });
+  $('bsel-no').addEventListener('click', function () { $('bsel').className = 'overlay'; });
+  $('bsel-ok').addEventListener('click', function () {
+    var p = productById(bselId); if (!p) return;
+    var ids = [];
+    sortedProducts().forEach(function (c) { for (var i = 0; i < (bselQty[c.id] || 0); i++) ids.push(c.id); });
+    if (ids.length) p.bundle = ids; else delete p.bundle;
+    save(); $('bsel').className = 'overlay'; renderCart(); renderSettings(); toast(ids.length ? 'セットの中身を決めました' : 'セットではなくなりました');
+  });
+
+  // 確認・数字入力の窓
+  var dlgCb = null;
+  function ask(msg, cb, opts) {
+    opts = opts || {};
+    $('dlg-msg').textContent = msg;
+    var inp = $('dlg-in'); inp.style.display = opts.input ? 'block' : 'none'; inp.value = opts.value || '';
+    $('dlg-ok').textContent = opts.ok || 'OK';
+    dlgCb = cb; $('dlg').className = 'overlay on';
+    if (opts.input) setTimeout(function () { inp.focus(); inp.select(); }, 60);
+  }
+  $('dlg-no').addEventListener('click', function () { dlgCb = null; $('dlg').className = 'overlay'; });
+  $('dlg-ok').addEventListener('click', function () {
+    var cb = dlgCb, v = $('dlg-in').value; dlgCb = null; $('dlg').className = 'overlay';
+    if (cb) cb(v);
+  });
+
+  // セットの中身：[{pid, no, name, qty}]（同じ商品が複数あれば個数をまとめる）
+  function bundleOf(p) {
+    if (!p || !p.bundle || !p.bundle.length) return null;
+    var m = {}, out = [];
+    p.bundle.forEach(function (id) {
+      var c = productById(id); if (!c) return;
+      if (!m[id]) { m[id] = { pid: c.id, no: c.no, name: c.name, qty: 0 }; out.push(m[id]); }
+      m[id].qty++;
+    });
+    return out.length ? out : null;
+  }
+
+  function sortedProducts() { return S.products.slice().sort(function (a, b) { return a.no - b.no; }); }
+  function productById(id) { for (var i = 0; i < S.products.length; i++) if (S.products[i].id === id) return S.products[i]; return null; }
+
+  // ---------- カート ----------
+  var mult = 1;
+  function cartLines() {
+    var out = [];
+    sortedProducts().forEach(function (p) { var q = S.cart[p.id] || 0; if (q > 0) out.push({ p: p, q: q }); });
+    return out;
+  }
+  function cartTotal() { return cartLines().reduce(function (s, l) { return s + l.p.price * l.q; }, 0); }
+  function cartCount() { return cartLines().reduce(function (s, l) { return s + l.q; }, 0); }
+  function setQty(id, q) {
+    if (q <= 0) delete S.cart[id]; else S.cart[id] = Math.min(q, 999);
+    save(); renderCart(); updateBadges();
+  }
+
+  function renderGrid() {
+    var h = '';
+    sortedProducts().forEach(function (p) {
+      h += '<button class="pbtn tone' + p.tone + (p.price < 0 ? ' discount' : '') + '" data-id="' + p.id + '">'
+        + '<span class="badge" id="b_' + p.id + '">0</span>'
+        + '<span class="nm" style="font-size:' + nameSize(p.name) + 'px">' + esc(p.name) + '</span>'
+        + '<span class="pr">' + yen(p.price) + '</span></button>';
+    });
+    $('grid').innerHTML = h || '<div class="empty">商品がありません。「設定」で追加してください。</div>';
+    updateBadges();
+  }
+  // 長い名前でも、できるだけ途中で折り返さないように、文字の大きさを調整する
+  function nameSize(n) {
+    var longest = 0;
+    String(n).split(/[ 　・（）()]/).forEach(function (w) { if (w.length > longest) longest = w.length; });
+    return longest >= 9 ? 12 : longest >= 7 ? 13 : 15;
+  }
+  function updateBadges() {
+    var btns = $('grid').querySelectorAll('.pbtn');
+    for (var i = 0; i < btns.length; i++) {
+      var id = btns[i].getAttribute('data-id'), q = S.cart[id] || 0;
+      btns[i].className = btns[i].className.replace(/ has\b/, '') + (q > 0 ? ' has' : '');
+      var b = $('b_' + id); if (b) b.textContent = q;
+    }
+  }
+  function renderCart() {
+    var lines = cartLines(), total = cartTotal(), n = cartCount();
+    $('cart-total').textContent = yen(total);
+    $('cart-n').textContent = n ? n + '点（タップで一覧を開閉）' : '商品を押してください';
+    renderEditBar();
+    $('btn-pay').disabled = !n; $('btn-clear').disabled = !n;
+    var h = '';
+    lines.forEach(function (l) {
+      h += '<div class="cl" data-id="' + l.p.id + '"><div class="cn">' + esc(l.p.name) + '<br><small>' + yen(l.p.price) + (bundleOf(l.p) ? '／中身：' + bundleOf(l.p).map(function (c) { return c.name + (c.qty > 1 ? '×' + c.qty : ''); }).join('・') : '') + '</small></div>'
+        + '<button class="qb" data-d="-1">−</button><button class="qv" data-q="1">' + l.q + '</button><button class="qb" data-d="1">＋</button>'
+        + '<div class="cs">' + yen(l.p.price * l.q) + '</div><button class="xb" data-x="1" aria-label="この商品を消す">✕</button></div>';
+    });
+    $('cart-lines').innerHTML = h;
+    if (!n) $('cart').className = '';
+  }
+  function renderEditBar() {
+    var eb = $('editbar'), s = S.editing ? saleById(S.editing) : null;
+    if (!s) { S.editing = null; eb.className = ''; return; }
+    $('editbar-t').textContent = timeOf(s.t) + ' の会計（' + yen(s.total) + '）を修正中';
+    eb.className = 'on';
+  }
+  function saleById(id) { for (var i = 0; i < S.sales.length; i++) if (S.sales[i].id === id) return S.sales[i]; return null; }
+
+  $('grid').addEventListener('click', function (e) {
+    var b = e.target.closest('.pbtn'); if (!b) return;
+    var id = b.getAttribute('data-id');
+    setQty(id, (S.cart[id] || 0) + mult);
+    if (mult !== 1) setMult(1);
+  });
+  function setMult(m) {
+    mult = m;
+    var bs = document.querySelectorAll('.mult button');
+    for (var i = 0; i < bs.length; i++) bs[i].className = (+bs[i].getAttribute('data-m') === m) ? 'on' : '';
+  }
+  document.querySelector('.mult').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var m = +b.getAttribute('data-m'); setMult(mult === m && m !== 1 ? 1 : m);
+  });
+  $('cart-sum').addEventListener('click', function () {
+    if (!cartCount()) return;
+    $('cart').className = $('cart').className === 'min' ? '' : 'min';
+  });
+  $('cart-lines').addEventListener('click', function (e) {
+    var row = e.target.closest('.cl'); if (!row) return;
+    var id = row.getAttribute('data-id'), q = S.cart[id] || 0;
+    var d = e.target.getAttribute('data-d');
+    if (d) { setQty(id, q + (+d)); return; }
+    if (e.target.getAttribute('data-x')) { setQty(id, 0); return; }
+    if (e.target.getAttribute('data-q')) {
+      var p = productById(id);
+      ask((p ? p.name : '') + ' の個数を入力', function (v) {
+        if (/^[0-9]+$/.test(String(v).trim())) setQty(id, parseInt(v, 10));
+      }, { input: true, value: String(q) });
+    }
+  });
+  $('btn-clear').addEventListener('click', function () {
+    if (!cartCount()) return;
+    // 確認の窓は出さず、すぐ空にする。間違えたら「元に戻す」で戻せる
+    var backup = JSON.parse(JSON.stringify(S.cart));
+    S.cart = {}; save(); renderCart(); updateBadges();
+    toast('クリアしました', '元に戻す', function () { S.cart = backup; save(); renderCart(); updateBadges(); });
+  });
+
+  // ---------- お会計 ----------
+  var pay = '現金', recv = '', lastSaleId = null, submitting = false;
+  function openCheckout() {
+    if (!cartCount()) return;
+    pay = '現金'; recv = ''; submitting = false;
+    $('co-total').textContent = yen(cartTotal());
+    $('co-go').disabled = false;
+    buildPay(); buildQuick(); buildKeys(); updateCash();
+    $('co').className = 'overlay on';
+  }
+  function closeCheckout() { $('co').className = 'overlay'; }
+  $('btn-pay').addEventListener('click', openCheckout);
+  $('co-back').addEventListener('click', closeCheckout);
+
+  function buildPay() {
+    var h = '';
+    ['現金', 'PayPay', 'その他'].forEach(function (p) { h += '<button class="chip' + (p === pay ? ' on' : '') + '" data-p="' + p + '">' + p + '</button>'; });
+    $('co-pay').innerHTML = h;
+  }
+  $('co-pay').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip'); if (!b) return;
+    pay = b.getAttribute('data-p'); buildPay(); updateCash();
+  });
+  function buildQuick() {
+    var h = '<button data-a="exact">ちょうど</button>';
+    [500, 1000, 2000, 5000, 10000].forEach(function (v) { h += '<button data-a="' + v + '">' + yen(v) + '</button>'; });
+    h += '<button data-a="next1000">千円単位</button><button data-a="c">クリア</button>';
+    $('co-quick').innerHTML = h;
+  }
+  function buildKeys() {
+    var h = '';
+    ['1','2','3','4','5','6','7','8','9','00','0','⌫'].forEach(function (k) { h += '<button data-k="' + k + '"' + (k === '⌫' ? ' class="fn"' : '') + '>' + k + '</button>'; });
+    $('co-keys').innerHTML = h;
+  }
+  $('co-quick').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var a = b.getAttribute('data-a'), t = cartTotal();
+    if (a === 'exact') recv = String(t);
+    else if (a === 'c') recv = '';
+    else if (a === 'next1000') recv = String(Math.ceil(t / 1000) * 1000);
+    else recv = String((parseInt(recv || '0', 10) || 0) + parseInt(a, 10));   // 札を足していく（1000円＋1000円…）
+    updateCash();
+  });
+  $('co-keys').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var k = b.getAttribute('data-k');
+    if (k === '⌫') recv = recv.slice(0, -1);
+    else { recv = (recv + k).replace(/^0+(?=[0-9])/, ''); if (recv.length > 7) recv = recv.slice(0, 7); }
+    updateCash();
+  });
+  function received() { return parseInt(recv || '0', 10) || 0; }
+  function updateCash() {
+    var t = cartTotal(), isCash = pay === '現金';
+    $('co-cash').style.display = isCash ? 'block' : 'none';
+    var r = received();
+    $('co-recv').textContent = yen(r);
+    var chg = $('co-chg'), v = $('co-chg-v');
+    if (r === 0) { chg.className = 'chg'; v.textContent = '—'; }
+    else if (r < t) { chg.className = 'chg ng'; v.textContent = 'あと ' + yen(t - r) + ' 不足'; }
+    else { chg.className = 'chg ok'; v.textContent = yen(r - t); }
+    $('co-go').disabled = isCash && r > 0 && r < t;
+  }
+
+  $('co-go').addEventListener('click', function () {
+    if (submitting) return;            // 2回押しても1回だけ記録する
+    var lines = cartLines(); if (!lines.length) return;
+    var t = cartTotal(), isCash = pay === '現金', r = received();
+    if (isCash && r > 0 && r < t) return;
+    submitting = true;
+    var sale = {
+      id: S.nextSale++, t: new Date().toISOString(), day: S.day,
+      items: lines.map(function (l) { var it = { pid: l.p.id, no: l.p.no, name: l.p.name, price: l.p.price, qty: l.q }; var b = bundleOf(l.p); if (b) it.bundle = b; return it; }),
+      total: t, pay: pay, received: isCash && r > 0 ? r : null, change: isCash && r >= t ? r - t : null, void: false
+    };
+    var old = S.editing ? saleById(S.editing) : null;
+    if (old) { sale.t = old.t; sale.day = old.day; sale.replaces = old.id; old.void = true; old.replacedBy = sale.id; }
+    S.editing = null;
+    S.sales.push(sale); S.cart = {}; save();
+    lastSaleId = sale.id;
+    closeCheckout(); renderCart(); updateBadges(); renderHeader();
+    showDone(sale);
+  });
+
+  function showDone(sale) {
+    $('done-big').textContent = sale.change !== null ? 'お釣り' : 'お会計 完了';
+    $('done-amt').textContent = sale.change !== null ? yen(sale.change) : yen(sale.total);
+    $('done-sub').textContent = sale.change !== null ? 'お預かり ' + yen(sale.received) + ' ／ 合計 ' + yen(sale.total) : sale.pay + ' ／ 合計 ' + yen(sale.total);
+    $('done').className = 'overlay on';
+  }
+  $('done-next').addEventListener('click', function () { $('done').className = 'overlay'; });
+  $('done-undo').addEventListener('click', function () {
+    if (lastSaleId === null) return;
+    ask('いまの会計を取り消しますか？\n（商品はカートに戻ります）', function () {
+      voidSale(lastSaleId, true); lastSaleId = null; $('done').className = 'overlay'; toast('取り消しました');
+    }, { ok: '取り消す' });
+  });
+  function voidSale(id, toCart) {
+    S.sales.forEach(function (s) {
+      if (s.id === id && !s.void) {
+        s.void = true;
+        if (toCart) { s.items.forEach(function (it) { var p = productById(it.pid); if (p) S.cart[p.id] = (S.cart[p.id] || 0) + it.qty; }); }
+      }
+    });
+    save(); renderCart(); updateBadges(); renderHeader(); renderActive();
+  }
+
+  // ---------- ヘッダー（日付・今日の合計） ----------
+  function daySales(date) { return S.sales.filter(function (s) { return !s.void && (date === 'all' || s.day === date); }); }
+  function renderHeader() {
+    var h = '';
+    S.days.forEach(function (d) { h += '<button class="day' + (d.date === S.day ? ' on' : '') + '" data-d="' + d.date + '">' + esc(d.label) + '</button>'; });
+    $('days').innerHTML = h;
+    var ds = daySales(S.day);
+    $('h-total').textContent = yen(ds.reduce(function (s, x) { return s + x.total; }, 0));
+    $('h-count').textContent = ds.length + '組';
+  }
+  $('days').addEventListener('click', function (e) {
+    var b = e.target.closest('.day'); if (!b) return;
+    var d = b.getAttribute('data-d');
+    if (d !== S.day) { S.day = d; save(); renderHeader(); renderActive(); }
+  });
+
+  // ---------- 画面切り替え ----------
+  var view = 'sale';
+  $('nav').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    view = b.getAttribute('data-v');
+    var bs = $('nav').querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) bs[i].className = bs[i] === b ? 'on' : '';
+    ['sale', 'report', 'history', 'settings'].forEach(function (v) { $('v-' + v).className = 'view' + (v === view ? ' on' : ''); });
+    $('cart').style.display = view === 'sale' ? '' : 'none';
+    renderActive();
+  });
+  function renderActive() {
+    if (view === 'report') renderReport();
+    else if (view === 'history') renderHistory();
+    else if (view === 'settings') renderSettings();
+  }
+
+  // ---------- 集計 ----------
+  var repDay = null;
+  function renderReport() {
+    var which = repDay || S.day;
+    var ds = daySales(which);
+    var rows = {}, order = [], viaKeys = {};
+    sortedProducts().forEach(function (p) { rows[p.id] = { no: p.no, name: p.name, qty: 0, rev: 0 }; order.push(p.id); });
+    sortedProducts().forEach(function (p) { (bundleOf(p) || []).forEach(function (c) { viaKeys[c.pid] = true; }); });   // 中身になる商品
+    var pays = {};
+    ds.forEach(function (s) {
+      pays[s.pay] = (pays[s.pay] || 0) + s.total;
+      s.items.forEach(function (it) {
+        var k = rows[it.pid] ? it.pid : 'x:' + it.name;     // 削除した商品の売上も残す
+        if (!rows[k]) { rows[k] = { no: it.no, name: it.name + '（削除済み）', qty: 0, rev: 0 }; order.push(k); }
+        rows[k].qty += it.qty; rows[k].rev += it.qty * it.price;
+        (it.bundle || []).forEach(function (c) {      // セットが売れたら、中身の商品も売れたものとして数える
+          var ck = rows[c.pid] ? c.pid : 'x:' + c.name;
+          if (!rows[ck]) { rows[ck] = { no: c.no, name: c.name + '（削除済み）', qty: 0, rev: 0 }; order.push(ck); }
+          rows[ck].via = (rows[ck].via || 0) + c.qty * it.qty; viaKeys[ck] = true;
+        });
+      });
+    });
+    var total = ds.reduce(function (s, x) { return s + x.total; }, 0);
+    var qty = order.reduce(function (s, k) { return s + rows[k].qty; }, 0);
+    var h = '<div class="days" style="margin-bottom:8px">';
+    S.days.forEach(function (d) { h += '<button class="day' + (d.date === which ? ' on' : '') + '" data-r="' + d.date + '" style="background:' + (d.date === which ? 'var(--accent)' : 'var(--card)') + ';color:' + (d.date === which ? '#fff' : 'var(--ink)') + '">' + esc(d.label) + '</button>'; });
+    h += '<button class="day" data-r="all" style="background:' + (which === 'all' ? 'var(--accent)' : 'var(--card)') + ';color:' + (which === 'all' ? '#fff' : 'var(--ink)') + '">全日</button></div>';
+    h += '<div class="card"><div class="kpis"><div class="kpi"><b>' + yen(total) + '</b><span>売上</span></div>'
+      + '<div class="kpi"><b>' + ds.length + '組</b><span>お会計</span></div>'
+      + '<div class="kpi"><b>' + (ds.length ? yen(total / ds.length) : '—') + '</b><span>客単価</span></div></div></div>';
+    h += '<div class="card"><h4>商品ごとの売れた数</h4><table><thead><tr><th>商品</th><th>数</th><th>売上</th></tr></thead><tbody>';
+    order.forEach(function (k) {
+      var r = rows[k];
+      h += '<tr><td class="pn' + (r.qty ? '' : ' zero') + '">' + esc(r.name) + '</td><td class="' + (r.qty ? '' : 'zero') + '">' + r.qty + '</td><td class="' + (r.qty ? '' : 'zero') + '">' + yen(r.rev) + '</td></tr>';
+    });
+    h += '</tbody><tfoot><tr><td>合計</td><td>' + qty + '</td><td>' + yen(total) + '</td></tr></tfoot></table></div>';
+    var vk = order.filter(function (k) { return viaKeys[k]; });
+    if (vk.length) {
+      var sa = 0, sv = 0;
+      h += '<div class="card"><h4>セットの中身も含めた個数（マフィンが何個売れたか）</h4><table><thead><tr><th>商品</th><th>単品</th><th>セット</th><th>合計</th></tr></thead><tbody>';
+      vk.forEach(function (k) {
+        var r = rows[k], v = r.via || 0; sa += r.qty; sv += v;
+        h += '<tr><td class="pn' + (r.qty + v ? '' : ' zero') + '">' + esc(r.name) + '</td><td class="' + (r.qty ? '' : 'zero') + '">' + r.qty + '</td><td class="' + (v ? '' : 'zero') + '">' + v + '</td><td class="' + (r.qty + v ? '' : 'zero') + '"><b>' + (r.qty + v) + '</b></td></tr>';
+      });
+      h += '</tbody><tfoot><tr><td>合計</td><td>' + sa + '</td><td>' + sv + '</td><td>' + (sa + sv) + '</td></tr></tfoot></table>'
+        + '<p class="note">上の「商品ごとの売れた数」では、セットは1個として数えます。この表は、セットの中身（例：マフィン4種を1個ずつ）も、その商品が売れた数に足しています。売上の金額は、セットの分を二重に数えていません。</p></div>';
+    }
+    h += '<div class="card"><h4>支払い方法</h4><table><tbody>';
+    ['現金', 'PayPay', 'その他'].forEach(function (p) { h += '<tr><td class="pn">' + p + '</td><td>' + yen(pays[p] || 0) + '</td></tr>'; });
+    h += '</tbody></table></div>';
+    $('v-report').innerHTML = h;
+  }
+  $('v-report').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-r]'); if (!b) return;
+    repDay = b.getAttribute('data-r'); renderReport();
+  });
+
+  // ---------- 履歴 ----------
+  function renderHistory() {
+    var list = S.sales.filter(function (s) { return s.day === S.day; }).slice().reverse();
+    var h = '';
+    if (!list.length) h = '<div class="empty">この日の会計はまだありません。</div>';
+    else {
+      h = '<div class="card">';
+      list.forEach(function (s) {
+        h += '<div class="hs' + (s.void ? ' void' : '') + '"><div class="top"><b>' + timeOf(s.t) + '　' + yen(s.total) + (s.void ? '（取消）' : '') + '</b><span>' + esc(s.pay) + '</span></div>'
+          + '<div class="it">' + s.items.map(function (it) { return esc(it.name) + ' ×' + it.qty; }).join('、') + '</div>'
+          + '<div class="bt"><span>' + (s.change !== null ? 'お預かり ' + yen(s.received) + '／お釣り ' + yen(s.change) : '') + '</span>'
+          + (s.void ? '' : '<span><button class="mini ed" data-e="' + s.id + '">修正</button> <button class="mini" data-v="' + s.id + '">取り消す</button></span>') + '</div></div>';
+      });
+      h += '</div>';
+    }
+    $('v-history').innerHTML = h;
+  }
+  $('v-history').addEventListener('click', function (e) {
+    var eb = e.target.closest('[data-e]');
+    if (eb) { startEdit(+eb.getAttribute('data-e')); return; }
+    var b = e.target.closest('[data-v]'); if (!b) return;
+    ask('この会計を取り消しますか？\n（集計から外れます）', function () { voidSale(+b.getAttribute('data-v'), false); toast('取り消しました'); }, { ok: '取り消す' });
+  });
+  // 記録した会計を、カートに戻して直す（確定すると、元の会計と入れ替わる）
+  function startEdit(id) {
+    var s = saleById(id); if (!s || s.void) return;
+    var go = function () {
+      S.cart = {}; var missing = [];
+      s.items.forEach(function (it) { var p = productById(it.pid); if (p) S.cart[p.id] = (S.cart[p.id] || 0) + it.qty; else missing.push(it.name); });
+      S.editing = id; S.day = s.day; save();
+      $('nav').querySelector('[data-v="sale"]').click(); renderHeader(); renderGrid(); renderCart();
+      toast(missing.length ? '一覧にない商品は戻せませんでした：' + missing.join('、') : '直したら「会計」を押してください');
+    };
+    if (cartCount() && !S.editing) ask('いまカートにある商品は消えます。この会計を修正しますか？', go, { ok: '修正する' });
+    else go();
+  }
+  $('edit-cancel').addEventListener('click', function () {
+    S.editing = null; S.cart = {}; save(); renderCart(); updateBadges(); toast('修正をやめました（元の会計はそのままです）');
+  });
+
+  // ---------- 設定 ----------
+  function renderSettings() {
+    var h = '<div class="card"><h4>商品（左から：並び順・名前・値段）</h4>';
+    sortedProducts().forEach(function (p) {
+      h += '<div class="prow" data-id="' + p.id + '"><input data-f="no" inputmode="numeric" value="' + p.no + '"><input data-f="name" value="' + esc(p.name) + '">'
+        + '<input data-f="price" inputmode="numeric" value="' + p.price + '"><button class="del" data-del="1" aria-label="削除">🗑</button>'
+        + '<div class="prow2">色：<select data-f="tone" style="width:auto">'
+        + TONES.map(function (n, i) { return '<option value="' + i + '"' + (i === p.tone ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>'
+        + '　<button class="mini" style="color:var(--accent)" data-bsel="1">セットの中身</button>'
+        + '<span style="flex:1;min-width:0">' + (bundleOf(p) ? esc(bundleOf(p).map(function (c) { return c.name + (c.qty > 1 ? '×' + c.qty : ''); }).join('、')) : '（セットではない）') + '</span></div></div>';
+    });
+    h += '<div class="btnrow"><button class="btn" id="add-p">＋ 商品を追加</button><button class="btn sec" id="add-disc">＋ 割引ボタンを追加</button></div>'
+      + '<p class="note">いちばん左の数字は、ボタンの並び順です（小さい順に並びます）。セットのボタンは、「セットの中身」を押して、入っている商品と個数を選ぶと作れます。セットが売れると、集計の「セットの中身も含めた個数」に、中身の商品も数えられます。</p>'
+      + '<p class="note">値段・名前は、すでに記録した会計には影響しません（記録時の値段で残ります）。割引ボタンは、マイナスの値段（例：−100）の商品で、押すと合計から引かれます。マフィン2個で〇円引き、などに使えます。</p></div>';
+
+    h += '<div class="card"><h4>出店日</h4>';
+    S.days.forEach(function (d, i) {
+      h += '<div class="prow" style="grid-template-columns:1fr 1fr 30px" data-di="' + i + '"><input data-df="date" type="date" value="' + d.date + '"><input data-df="label" value="' + esc(d.label) + '"><button class="del" data-ddel="1">🗑</button></div>';
+    });
+    h += '<div class="btnrow"><button class="btn sec" id="add-d">＋ 出店日を追加</button></div></div>';
+
+    h += '<div class="card"><h4>データ（この端末の中だけに保存されています）</h4>'
+      + '<span class="status">' + (memoryOnly ? '⚠ 保存できない状態です（プライベートモード？）' : '✓ 自動で保存中・電波は不要') + '</span>'
+      + '<div class="btnrow"><button class="btn sec" id="x-csv">売上をCSVで書き出す</button><button class="btn sec" id="x-json">バックアップ（コピー）</button><button class="btn sec" id="i-json">バックアップから戻す</button></div>'
+      + '<textarea id="x-area" style="display:none;margin-top:8px"></textarea><div class="btnrow" id="x-act" style="display:none"></div>'
+      + '<p class="note">その日の終わりに「売上をCSVで書き出す」を押して、メモやメールに貼っておくと安心です。</p>'
+      + '<div class="btnrow"><button class="btn dng" id="reset">すべてのデータを消す</button></div></div>';
+    $('v-settings').innerHTML = h;
+  }
+  $('v-settings').addEventListener('change', function (e) {
+    var el = e.target, row = el.closest('.prow'); if (!row) return;
+    var f = el.getAttribute('data-f'), df = el.getAttribute('data-df');
+    if (f) {
+      var p = productById(row.getAttribute('data-id')); if (!p) return;
+      if (f === 'name') p.name = el.value.trim() || p.name;
+      else if (f === 'no') { var n = parseInt(el.value, 10); if (n > 0) p.no = n; }
+      else if (f === 'price') { var v = parseInt(String(el.value).replace(/[−ー－]/g, '-'), 10); if (!isNaN(v)) p.price = v; }
+      else if (f === 'tone') p.tone = parseInt(el.value, 10) || 0;
+      save(); renderGrid(); renderCart(); renderSettings();
+    } else if (df) {
+      var d = S.days[+row.getAttribute('data-di')]; if (!d) return;
+      if (df === 'date' && el.value) { d.date = el.value; if (!d.label) d.label = shortLabel(el.value); }
+      if (df === 'label') d.label = el.value.trim() || shortLabel(d.date);
+      if (!S.days.some(function (x) { return x.date === S.day; })) S.day = pickDay();
+      save(); renderHeader(); renderSettings();
+    }
+  });
+  function shortLabel(iso) { var m = iso.split('-'); return (+m[1]) + '/' + (+m[2]); }
+  $('v-settings').addEventListener('click', function (e) {
+    var t = e.target;
+    var row = t.closest('.prow');
+    if (t.getAttribute('data-bsel') && row) { openBundleSelect(row.getAttribute('data-id')); return; }
+    if (t.getAttribute('data-del') && row) {
+      var p = productById(row.getAttribute('data-id'));
+      if (p) ask('「' + p.name + '」を削除しますか？\n（記録済みの売上は残ります）', function () {
+        S.products = S.products.filter(function (x) { return x.id !== p.id; }); delete S.cart[p.id];
+        save(); renderGrid(); renderCart(); renderSettings();
+      }, { ok: '削除する' });
+      return;
+    }
+    if (t.getAttribute('data-ddel') && row) {
+      var i = +row.getAttribute('data-di');
+      if (S.days.length > 1) ask('出店日「' + S.days[i].label + '」を一覧から外しますか？\n（記録済みの売上は残ります）', function () {
+        S.days.splice(i, 1); if (!S.days.some(function (x) { return x.date === S.day; })) S.day = pickDay();
+        save(); renderHeader(); renderSettings();
+      }, { ok: '外す' });
+      return;
+    }
+    if (t.id === 'add-p' || t.id === 'add-disc') {
+      var max = 0; S.products.forEach(function (p) { if (p.no > max) max = p.no; });
+      var disc = t.id === 'add-disc';
+      S.products.push({ id: 'p' + (S.nextId++), no: max + 1, name: disc ? '割引（名前を入れてください）' : '新しい商品', price: disc ? -100 : 400, tone: disc ? 1 : 5 });
+      save(); renderGrid(); renderSettings(); toast('追加しました。名前と値段を直してください'); return;
+    }
+    if (t.id === 'add-d') {
+      var last = S.days.length ? S.days[S.days.length - 1].date : todayStr();
+      S.days.push({ date: last, label: '新しい日' }); save(); renderHeader(); renderSettings(); return;
+    }
+    if (t.id === 'x-csv') { showExport(csv(), 'CSV（全選択してコピー、または共有）'); return; }
+    if (t.id === 'x-json') { showExport(JSON.stringify(S), 'バックアップ（全部コピーして、メモなどに保存）'); return; }
+    if (t.id === 'i-json') {
+      var ta = $('x-area'); ta.style.display = 'block'; ta.value = ''; ta.placeholder = 'バックアップの文字をここに貼り付け';
+      var act = $('x-act'); act.style.display = 'flex'; act.innerHTML = '<button class="btn" id="do-import">この内容で戻す</button>'; return;
+    }
+    if (t.id === 'do-import') {
+      try {
+        var o = JSON.parse($('x-area').value);
+        if (!o || !o.products || !o.sales) throw new Error('x');
+        ask('今のデータは上書きされます。戻しますか？', function () { S = o; S.cart = S.cart || {}; save(); init(); toast('戻しました'); }, { ok: '戻す' });
+      } catch (er) { toast('バックアップの形式が違います'); }
+      return;
+    }
+    if (t.id === 'reset') {
+      ask('売上も商品もすべて消えます。本当に消しますか？', function () {
+        ask('もう一度確認します。元に戻せません。消しますか？', function () {
+          S = defaults(); S.day = pickDay(); save(); init(); toast('初期状態に戻しました');
+        }, { ok: '消す' });
+      }, { ok: '消す' });
+    }
+  });
+  function showExport(text, label) {
+    var ta = $('x-area'); ta.style.display = 'block'; ta.value = text;
+    var act = $('x-act'); act.style.display = 'flex'; act.innerHTML = '<span class="note" style="flex:1;margin:0">' + esc(label) + '</span><button class="btn sec" id="do-copy">コピー</button>';
+    $('do-copy').onclick = function () {
+      ta.select();
+      try { if (navigator.clipboard) navigator.clipboard.writeText(text); else document.execCommand('copy'); toast('コピーしました'); } catch (e) { toast('選択した文字を、長押しでコピーしてください'); }
+    };
+  }
+  function csv() {
+    var L = ['日付,時刻,会計番号,商品番号,商品名,単価,個数,小計,支払い方法,お預かり,お釣り,取消,セットの中身'];
+    S.sales.forEach(function (s) {
+      s.items.forEach(function (it) {
+        L.push([s.day, timeOf(s.t), s.id, it.no, '"' + String(it.name).replace(/"/g, '""') + '"', it.price, it.qty, it.price * it.qty, s.pay, s.received === null ? '' : s.received, s.change === null ? '' : s.change, s.void ? '取消' : '', it.bundle ? '"' + it.bundle.map(function (c) { return c.no + c.name + '×' + c.qty; }).join('＋') + '"' : ''].join(','));
+      });
+    });
+    return L.join('\n');
+  }
+
+  // ---------- 起動 ----------
+  function init() {
+    if (!S.days.some(function (d) { return d.date === S.day; })) S.day = pickDay();
+    repDay = null; setMult(1);
+    renderHeader(); renderGrid(); renderCart(); renderActive();
+  }
+  init();
+
+  // 電波がなくても開けるように、サーバーに置いたときだけ、画面の控えを端末に保存する
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+  window.__eventpos = { get state() { return S; } };   // テスト用
+})();
+</script>
+</body>
+</html>

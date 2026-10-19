@@ -1,0 +1,9 @@
+{
+  "name": "イベント会計",
+  "short_name": "イベント会計",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F7F5F2",
+  "theme_color": "#2C7873",
+  "lang": "ja"
+}
