@@ -275,12 +275,13 @@
       [1,'かぼちゃマフィン',450,0],[2,'オレオマフィン',450,0],[3,'紅茶マフィン',450,0],[4,'あんバターマフィン',450,0],
       [5,'サクほろクッキー3種',450,3],[6,'フロランタン',350,2],[7,'ブロッキー',400,2],[8,'くるくるクッキー',350,3],
       [9,'スコーン プレーン',350,4],[10,'スコーン チョコ',400,4],[11,'スコーン カレー',400,4],
-      [12,'スコーン 抹茶ホワイトチョコ',400,4],[13,'スコーン（5種類目・名前は未定）',400,4],[14,'マフィン4種セット',1700,1]
+      [12,'スコーン 抹茶ホワイトチョコ',400,4],[13,'スコーン（5種類目・名前は未定）',400,4],[14,'マフィン4種セット',1700,1],
+      [15,'フロランタンの切れ端（50g）',400,2]
     ];
     return {
       products: P.map(function (p, i) { var o = { id: 'p' + (i + 1), no: p[0], name: p[1], price: p[2], tone: p[3] }; if (p[0] === 14) o.bundle = ['p1', 'p2', 'p3', 'p4']; return o; }),
       days: [{ date: '2026-11-01', label: '11/1' }, { date: '2026-11-03', label: '11/3' }],
-      sales: [], cart: {}, day: '', nextId: 15, nextSale: 1, ver: 2
+      sales: [], cart: {}, day: '', nextId: 16, nextSale: 1, ver: 3
     };
   }
   var S = load() || defaults();
@@ -294,6 +295,16 @@
       S.products.push({ id: nid, no: Math.max(14, mx + 1), name: 'マフィン4種セット', price: 1700, tone: 1, bundle: ['p1', 'p2', 'p3', 'p4'] });
     }
     S.ver = 2; save();
+  }
+  if (S.ver < 3) {      // 「フロランタンの切れ端（50g）400円」を、すでにあるデータにも足す（売上・ほかの商品は変えない）
+    if (!S.products.some(function (p) { return p.name === 'フロランタンの切れ端（50g）'; })) {
+      var mx3 = 0; S.products.forEach(function (p) { if (p.no > mx3) mx3 = p.no; });
+      var nid3 = 'p' + (S.nextId || 15);
+      while (S.products.some(function (p) { return p.id === nid3; })) nid3 = 'p' + (parseInt(nid3.slice(1), 10) + 1);
+      S.nextId = parseInt(nid3.slice(1), 10) + 1;
+      S.products.push({ id: nid3, no: Math.max(15, mx3 + 1), name: 'フロランタンの切れ端（50g）', price: 400, tone: 2 });
+    }
+    S.ver = 3; save();
   }
   if (!S.day || !S.days.some(function (d) { return d.date === S.day; })) S.day = pickDay();
 
