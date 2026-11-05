@@ -760,6 +760,7 @@
 
     h += '<div class="card"><h4>データ（この端末の中だけに保存されています）</h4>'
       + '<span class="status">' + (memoryOnly ? '⚠ 保存できない状態です（プライベートモード？）' : '✓ 自動で保存中・電波は不要') + '</span>'
+      + '<div class="prow2" style="margin:8px 0 0">書き出す日：<select id="x-day" style="width:auto"><option value="all">全日</option>' + S.days.map(function (d) { return '<option value="' + d.date + '"' + (d.date === S.day ? ' selected' : '') + '>' + esc(d.label) + '</option>'; }).join('') + '</select><span>（長いと途中で切れるので、日ごとがおすすめ）</span></div>'
       + '<div class="btnrow"><button class="btn sec" id="x-csv">売上をCSVで書き出す</button><button class="btn sec" id="x-json">バックアップ（コピー）</button><button class="btn sec" id="i-json">バックアップから戻す</button></div>'
       + '<textarea id="x-area" style="display:none;margin-top:8px"></textarea><div class="btnrow" id="x-act" style="display:none"></div>'
       + '<p class="note">その日の終わりに「売上をCSVで書き出す」を押して、メモやメールに貼っておくと安心です。</p>'
@@ -815,7 +816,7 @@
       var last = S.days.length ? S.days[S.days.length - 1].date : todayStr();
       S.days.push({ date: last, label: '新しい日' }); save(); renderHeader(); renderSettings(); return;
     }
-    if (t.id === 'x-csv') { showExport(csv(), 'CSV（全選択してコピー、または共有）'); return; }
+    if (t.id === 'x-csv') { var xd = $('x-day') ? $('x-day').value : 'all'; showExport(csv(xd), 'CSV（' + (xd === 'all' ? '全日' : xd) + '）全選択してコピー、または共有'); return; }
     if (t.id === 'x-json') { showExport(JSON.stringify(S), 'バックアップ（全部コピーして、メモなどに保存）'); return; }
     if (t.id === 'i-json') {
       var ta = $('x-area'); ta.style.display = 'block'; ta.value = ''; ta.placeholder = 'バックアップの文字をここに貼り付け';
@@ -845,9 +846,10 @@
       try { if (navigator.clipboard) navigator.clipboard.writeText(text); else document.execCommand('copy'); toast('コピーしました'); } catch (e) { toast('選択した文字を、長押しでコピーしてください'); }
     };
   }
-  function csv() {
+  function csv(day) {
     var L = ['日付,時刻,会計番号,商品番号,商品名,単価,個数,小計,支払い方法,お預かり,お釣り,取消,セットの中身'];
     S.sales.forEach(function (s) {
+      if (day && day !== 'all' && s.day !== day) return;
       s.items.forEach(function (it) {
         L.push([s.day, timeOf(s.t), s.id, it.no, '"' + String(it.name).replace(/"/g, '""') + '"', it.price, it.qty, it.price * it.qty, s.pay, s.received === null ? '' : s.received, s.change === null ? '' : s.change, s.void ? '取消' : '', it.bundle ? '"' + it.bundle.map(function (c) { return c.no + c.name + '×' + c.qty; }).join('＋') + '"' : ''].join(','));
       });
